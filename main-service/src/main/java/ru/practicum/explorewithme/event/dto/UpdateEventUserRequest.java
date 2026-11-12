@@ -2,7 +2,7 @@ package ru.practicum.explorewithme.event.dto;
 
 
 import lombok.*;
-import ru.practicum.explorewithme.event.UserStateAction;
+import ru.practicum.explorewithme.event.enums.UserStateAction;
 
 
 @Getter

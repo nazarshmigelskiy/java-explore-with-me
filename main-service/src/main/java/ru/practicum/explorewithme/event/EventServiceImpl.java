@@ -2,17 +2,21 @@ package ru.practicum.explorewithme.event;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.explorewithme.category.Category;
 import ru.practicum.explorewithme.category.CategoryRepository;
 import ru.practicum.explorewithme.event.dto.*;
+import ru.practicum.explorewithme.event.enums.AdminStateAction;
+import ru.practicum.explorewithme.event.enums.EventState;
 import ru.practicum.explorewithme.exception.BadRequestException;
 import ru.practicum.explorewithme.exception.ConflictException;
 import ru.practicum.explorewithme.exception.NotFoundException;
 import ru.practicum.explorewithme.user.User;
 import ru.practicum.explorewithme.user.UserRepository;
 import ru.practicum.explorewithme.util.OffsetPageRequest;
+import static ru.practicum.explorewithme.event.EventSpecification.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,11 +28,13 @@ public class EventServiceImpl implements EventService {
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
     private final EventRepository eventRepository;
+    private static final int MIN_HOURS_FOR_USER = 2;
+    private static final int MIN_HOURS_FOR_ADMIN = 1;
 
     @Override
     @Transactional
     public EventFullDto create(NewEventDto newEventDto, long userId) {
-        checkEventDate(newEventDto.getEventDate());
+        checkEventDate(newEventDto.getEventDate(), MIN_HOURS_FOR_USER);
         Event event = EventMapper.toEventFromNewEventDto(newEventDto);
         event.setCategory(getCategory(newEventDto.getCategory()));
         event.setInitiator(getUser(userId));
@@ -68,12 +74,61 @@ public class EventServiceImpl implements EventService {
                     });
         }
 
-        applyUpdate(event, request);
+        applyUpdate(event, request, MIN_HOURS_FOR_USER);
 
-        return EventMapper.toFullDto(eventRepository.save(event), 0L, 0L);
+        return EventMapper.toFullDto(event, 0L, 0L);
     }
 
-    private void applyUpdate(Event event, UpdateEventRequest request) {
+    @Override
+    @Transactional
+    public EventFullDto updateByAdmin(long eventId, UpdateEventAdminRequest request) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new NotFoundException("Событие с таким id не найдено"));
+        AdminStateAction action = request.getStateAction();
+
+        if (action == AdminStateAction.PUBLISH_EVENT && event.getState() != EventState.PENDING)
+            throw new ConflictException("Опубликовать можно только событие, ожидающее модерации. Текущее состояние: "
+                    + event.getState());
+
+        if (action == AdminStateAction.REJECT_EVENT && event.getState() == EventState.PUBLISHED)
+            throw new ConflictException("Нельзя отклонить опубликованное событие");
+
+        applyUpdate(event, request, MIN_HOURS_FOR_ADMIN);
+
+        if (action == AdminStateAction.PUBLISH_EVENT) {
+            if (event.getEventDate().isBefore(LocalDateTime.now().plusHours(MIN_HOURS_FOR_ADMIN))) {
+                throw new ConflictException("До начала события должно оставаться не меньше часа");
+            }
+            event.setState(EventState.PUBLISHED);
+            event.setPublishedOn(LocalDateTime.now());
+        } else if (action == AdminStateAction.REJECT_EVENT) {
+            event.setState(EventState.CANCELED);
+        }
+        return EventMapper.toFullDto(event, 0L, 0L);
+    }
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventFullDto> getEventsByAdmin(AdminEventParams params) {
+        if (params.rangeStart() != null && params.rangeEnd() != null
+                && params.rangeStart().isAfter(params.rangeEnd()))
+            throw new BadRequestException("Начало диапазона дат позже его конца");
+
+        Specification<Event> spec = Specification.where(initiatorIn(params.users()))
+                .and(stateIn(params.states()))
+                .and(categoryIn(params.categories()))
+                .and(eventDateFrom(params.rangeStart()))
+                .and(eventDateTo(params.rangeEnd()));
+
+        OffsetPageRequest page = new OffsetPageRequest(params.from(), params.size(), Sort.by("id"));
+
+        return eventRepository.findAll(spec, page).stream()
+                .map(event -> EventMapper.toFullDto(event, 0L, 0L))
+                .toList();
+    }
+
+    private void applyUpdate(Event event, UpdateEventRequest request, int minHour) {
         if (request.getAnnotation() != null) event.setAnnotation(request.getAnnotation());
 
         if (request.getDescription() != null)
@@ -89,7 +144,7 @@ public class EventServiceImpl implements EventService {
             event.setLocation(request.getLocation());
 
         if (request.getEventDate() != null) {
-            checkEventDate(request.getEventDate());
+            checkEventDate(request.getEventDate(), minHour);
             event.setEventDate(request.getEventDate());
         }
 
@@ -104,9 +159,10 @@ public class EventServiceImpl implements EventService {
 
     }
 
-    private void checkEventDate(LocalDateTime time) {
-        if (time.isBefore(LocalDateTime.now().plusHours(2)))
-            throw new BadRequestException("Дата начала события раньше чем через 2 часа от текущего момента");
+    private void checkEventDate(LocalDateTime time, int minHours) {
+        if (time.isBefore(LocalDateTime.now().plusHours(minHours)))
+            throw new BadRequestException("Дата начала события раньше чем через "
+                    + minHours + " ч. от текущего момента");
     }
 
     private User getUser(Long userId) {
