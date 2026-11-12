@@ -19,4 +19,11 @@ public class UserMapper {
                 userRequest.getEmail()
         );
     }
+
+    public static UserShortDto toUserShortDto(User user) {
+        return new UserShortDto(
+                user.getId(),
+                user.getName()
+        );
+    }
 }

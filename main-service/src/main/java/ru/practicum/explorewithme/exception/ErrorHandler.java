@@ -54,7 +54,8 @@ public class ErrorHandler {
             ConstraintViolationException.class,
             MissingServletRequestParameterException.class,
             MethodArgumentTypeMismatchException.class,
-            HttpMessageNotReadableException.class
+            HttpMessageNotReadableException.class,
+            BadRequestException.class
     })
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiError handleBadRequest(Exception e) {
