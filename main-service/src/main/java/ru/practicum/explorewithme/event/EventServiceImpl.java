@@ -13,13 +13,19 @@ import ru.practicum.explorewithme.event.enums.EventState;
 import ru.practicum.explorewithme.exception.BadRequestException;
 import ru.practicum.explorewithme.exception.ConflictException;
 import ru.practicum.explorewithme.exception.NotFoundException;
+import ru.practicum.explorewithme.request.EventRequestCount;
+import ru.practicum.explorewithme.request.RequestRepository;
+import ru.practicum.explorewithme.request.RequestStatus;
 import ru.practicum.explorewithme.user.User;
 import ru.practicum.explorewithme.user.UserRepository;
 import ru.practicum.explorewithme.util.OffsetPageRequest;
+
 import static ru.practicum.explorewithme.event.EventSpecification.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -28,6 +34,7 @@ public class EventServiceImpl implements EventService {
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
     private final EventRepository eventRepository;
+    private final RequestRepository requestRepository;
     private static final int MIN_HOURS_FOR_USER = 2;
     private static final int MIN_HOURS_FOR_ADMIN = 1;
 
@@ -45,17 +52,21 @@ public class EventServiceImpl implements EventService {
     @Transactional(readOnly = true)
     public List<EventShortDto> getEventsByUserId(long userId, int from, int size) {
         OffsetPageRequest request = new OffsetPageRequest(from, size, Sort.by("id"));
-        return eventRepository.findAllByInitiatorId(userId, request).stream()
-                .map(event -> EventMapper.toShortDto(event, 0L, 0L))
+        List<Event> events = eventRepository.findAllByInitiatorId(userId, request);
+        Map<Long, Long> confirmed = getConfirmedCounts(events);
+        return events.stream()
+                .map(event -> EventMapper.toShortDto(
+                        event, confirmed.getOrDefault(event.getId(), 0L), 0L))
                 .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public EventFullDto getEventByUserIdAndEventId(long userId, long eventId) {
-        return EventMapper.toFullDto(eventRepository.findByIdAndInitiatorId(eventId, userId)
-                        .orElseThrow(() -> new NotFoundException("Событие с таким id не найдено")),
-                0L, 0L);
+        Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
+                .orElseThrow(() -> new NotFoundException("Событие с таким id не найдено"));
+        long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
+        return EventMapper.toFullDto(event, confirmed, 0L);
     }
 
     @Override
@@ -76,7 +87,9 @@ public class EventServiceImpl implements EventService {
 
         applyUpdate(event, request, MIN_HOURS_FOR_USER);
 
-        return EventMapper.toFullDto(event, 0L, 0L);
+        long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
+
+        return EventMapper.toFullDto(event, confirmed, 0L);
     }
 
     @Override
@@ -104,7 +117,10 @@ public class EventServiceImpl implements EventService {
         } else if (action == AdminStateAction.REJECT_EVENT) {
             event.setState(EventState.CANCELED);
         }
-        return EventMapper.toFullDto(event, 0L, 0L);
+
+        long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
+
+        return EventMapper.toFullDto(event, confirmed, 0L);
     }
 
 
@@ -123,8 +139,13 @@ public class EventServiceImpl implements EventService {
 
         OffsetPageRequest page = new OffsetPageRequest(params.from(), params.size(), Sort.by("id"));
 
-        return eventRepository.findAll(spec, page).stream()
-                .map(event -> EventMapper.toFullDto(event, 0L, 0L))
+        List<Event> events = eventRepository.findAll(spec, page).toList();
+
+        Map<Long, Long> confirmed = getConfirmedCounts(events);
+
+        return events.stream()
+                .map(event -> EventMapper.toFullDto(
+                        event, confirmed.getOrDefault(event.getId(), 0L), 0L))
                 .toList();
     }
 
@@ -157,6 +178,12 @@ public class EventServiceImpl implements EventService {
         if (request.getParticipantLimit() != null)
             event.setParticipantLimit(request.getParticipantLimit());
 
+    }
+
+    private Map<Long, Long> getConfirmedCounts(List<Event> events) {
+        List<Long> ids = events.stream().map(Event::getId).toList();
+        return requestRepository.countByEventIds(ids, RequestStatus.CONFIRMED).stream()
+                .collect(Collectors.toMap(EventRequestCount::getEventId, EventRequestCount::getCount));
     }
 
     private void checkEventDate(LocalDateTime time, int minHours) {
