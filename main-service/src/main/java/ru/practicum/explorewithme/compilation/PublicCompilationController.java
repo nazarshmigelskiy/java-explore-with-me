@@ -3,6 +3,7 @@ package ru.practicum.explorewithme.compilation;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.practicum.explorewithme.compilation.dto.CompilationDto;
 
@@ -11,6 +12,7 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/compilations")
+@Validated
 public class PublicCompilationController {
     private final CompilationService service;
 
