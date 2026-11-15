@@ -17,4 +17,8 @@ public interface EventService {
 
     EventFullDto updateByAdmin(long eventId, UpdateEventAdminRequest request);
 
+    EventFullDto getPublishedEvent(long eventId, String ip, String uri);
+
+    List<EventShortDto> getPublishedEvents(PublicEventParams params, String ip, String uri);
+
 }

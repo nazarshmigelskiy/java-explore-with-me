@@ -10,10 +10,8 @@ import ru.practicum.explorewithme.compilation.dto.UpdateCompilationRequest;
 import ru.practicum.explorewithme.event.Event;
 import ru.practicum.explorewithme.event.EventMapper;
 import ru.practicum.explorewithme.event.EventRepository;
+import ru.practicum.explorewithme.event.EventStatService;
 import ru.practicum.explorewithme.exception.NotFoundException;
-import ru.practicum.explorewithme.request.EventRequestCount;
-import ru.practicum.explorewithme.request.RequestRepository;
-import ru.practicum.explorewithme.request.RequestStatus;
 import ru.practicum.explorewithme.util.OffsetPageRequest;
 
 import java.util.*;
@@ -24,7 +22,7 @@ import java.util.stream.Collectors;
 public class CompilationServiceImpl implements CompilationService {
     private final CompilationRepository compilationRepository;
     private final EventRepository eventRepository;
-    private final RequestRepository requestRepository;
+    private final EventStatService statService;
 
     @Override
     @Transactional
@@ -80,21 +78,18 @@ public class CompilationServiceImpl implements CompilationService {
                 .orElseThrow(() -> new NotFoundException("Подборка не найдена")));
     }
 
-    private Map<Long, Long> getConfirmedCounts(Collection<Event> events) {
-        List<Long> ids = events.stream().map(Event::getId).toList();
-        return requestRepository.countByEventIds(ids, RequestStatus.CONFIRMED).stream()
-                .collect(Collectors.toMap(EventRequestCount::getEventId, EventRequestCount::getCount));
-    }
 
     private List<CompilationDto> toDtos(List<Compilation> compilations) {
         Set<Event> allEvents = compilations.stream()
                 .flatMap(c -> c.getEvents().stream())
                 .collect(Collectors.toSet());
-        Map<Long, Long> confirmed = getConfirmedCounts(allEvents);
+        Map<Long, Long> confirmed = statService.getConfirmedCounts(allEvents);
+        Map<Long, Long> views = statService.getViews(allEvents);
 
         return compilations.stream()
                 .map(c -> CompilationMapper.toDto(c, c.getEvents().stream()
-                        .map(e -> EventMapper.toShortDto(e, confirmed.getOrDefault(e.getId(), 0L), 0L))
+                        .map(e -> EventMapper.toShortDto(e, confirmed.getOrDefault(e.getId(), 0L),
+                                views.getOrDefault(e.getId(), 0L)))
                         .toList()))
                 .toList();
     }

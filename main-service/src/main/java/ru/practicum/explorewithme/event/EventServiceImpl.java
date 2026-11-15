@@ -9,23 +9,21 @@ import ru.practicum.explorewithme.category.Category;
 import ru.practicum.explorewithme.category.CategoryRepository;
 import ru.practicum.explorewithme.event.dto.*;
 import ru.practicum.explorewithme.event.enums.AdminStateAction;
+import ru.practicum.explorewithme.event.enums.EventSort;
 import ru.practicum.explorewithme.event.enums.EventState;
 import ru.practicum.explorewithme.exception.BadRequestException;
 import ru.practicum.explorewithme.exception.ConflictException;
 import ru.practicum.explorewithme.exception.NotFoundException;
-import ru.practicum.explorewithme.request.EventRequestCount;
-import ru.practicum.explorewithme.request.RequestRepository;
-import ru.practicum.explorewithme.request.RequestStatus;
 import ru.practicum.explorewithme.user.User;
 import ru.practicum.explorewithme.user.UserRepository;
 import ru.practicum.explorewithme.util.OffsetPageRequest;
 
-import static ru.practicum.explorewithme.event.EventSpecification.*;
-
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+
+import static ru.practicum.explorewithme.event.EventSpecification.*;
 
 
 @Service
@@ -34,7 +32,7 @@ public class EventServiceImpl implements EventService {
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
     private final EventRepository eventRepository;
-    private final RequestRepository requestRepository;
+    private final EventStatService statService;
     private static final int MIN_HOURS_FOR_USER = 2;
     private static final int MIN_HOURS_FOR_ADMIN = 1;
 
@@ -45,7 +43,7 @@ public class EventServiceImpl implements EventService {
         Event event = EventMapper.toEventFromNewEventDto(newEventDto);
         event.setCategory(getCategory(newEventDto.getCategory()));
         event.setInitiator(getUser(userId));
-        return EventMapper.toFullDto(eventRepository.save(event), 0L, 0L);
+        return toFullDto(eventRepository.save(event));
     }
 
     @Override
@@ -53,11 +51,7 @@ public class EventServiceImpl implements EventService {
     public List<EventShortDto> getEventsByUserId(long userId, int from, int size) {
         OffsetPageRequest request = new OffsetPageRequest(from, size, Sort.by("id"));
         List<Event> events = eventRepository.findAllByInitiatorId(userId, request);
-        Map<Long, Long> confirmed = getConfirmedCounts(events);
-        return events.stream()
-                .map(event -> EventMapper.toShortDto(
-                        event, confirmed.getOrDefault(event.getId(), 0L), 0L))
-                .toList();
+        return toShortDtos(events);
     }
 
     @Override
@@ -65,8 +59,7 @@ public class EventServiceImpl implements EventService {
     public EventFullDto getEventByUserIdAndEventId(long userId, long eventId) {
         Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
                 .orElseThrow(() -> new NotFoundException("Событие с таким id не найдено"));
-        long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
-        return EventMapper.toFullDto(event, confirmed, 0L);
+        return toFullDto(event);
     }
 
     @Override
@@ -87,9 +80,8 @@ public class EventServiceImpl implements EventService {
 
         applyUpdate(event, request, MIN_HOURS_FOR_USER);
 
-        long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
 
-        return EventMapper.toFullDto(event, confirmed, 0L);
+        return toFullDto(event);
     }
 
     @Override
@@ -118,9 +110,7 @@ public class EventServiceImpl implements EventService {
             event.setState(EventState.CANCELED);
         }
 
-        long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
-
-        return EventMapper.toFullDto(event, confirmed, 0L);
+        return toFullDto(event);
     }
 
 
@@ -141,11 +131,80 @@ public class EventServiceImpl implements EventService {
 
         List<Event> events = eventRepository.findAll(spec, page).toList();
 
-        Map<Long, Long> confirmed = getConfirmedCounts(events);
+        return toFullDtos(events);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EventFullDto getPublishedEvent(long eventId, String ip, String uri) {
+        Event event = eventRepository.findByIdAndState(eventId, EventState.PUBLISHED)
+                .orElseThrow(() -> new NotFoundException("Событие с id=" + eventId + " не найдено"));
+        statService.saveHit(uri, ip);
+        return toFullDto(event);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventShortDto> getPublishedEvents(PublicEventParams params, String ip, String uri) {
+        if (params.rangeStart() != null && params.rangeEnd() != null
+                && params.rangeStart().isAfter(params.rangeEnd())) {
+            throw new BadRequestException("Начало диапазона дат позже его конца");
+        }
+
+        LocalDateTime start = params.rangeStart();
+        if (params.rangeStart() == null && params.rangeEnd() == null) {
+            start = LocalDateTime.now();
+        }
+
+        Specification<Event> spec = Specification.where(stateIn(List.of(EventState.PUBLISHED)))
+                .and(textContains(params.text()))
+                .and(categoryIn(params.categories()))
+                .and(paidEquals(params.paid()))
+                .and(eventDateFrom(start))
+                .and(eventDateTo(params.rangeEnd()))
+                .and(onlyAvailable(params.onlyAvailable()));
+
+        statService.saveHit(uri, ip);
+        if (params.sort() == EventSort.VIEWS) {
+            List<Event> all = eventRepository.findAll(spec);
+            return toShortDtos(all).stream()
+                    .sorted(Comparator.comparing(EventShortDto::getViews).reversed())
+                    .skip(params.from())
+                    .limit(params.size())
+                    .toList();
+        }
+
+        Sort sort = params.sort() == EventSort.EVENT_DATE ? Sort.by("eventDate") : Sort.by("id");
+        List<Event> events = eventRepository
+                .findAll(spec, new OffsetPageRequest(params.from(), params.size(), sort))
+                .getContent();
+
+        return toShortDtos(events);
+    }
+
+    private List<EventFullDto> toFullDtos(List<Event> events) {
+        Map<Long, Long> confirmed = statService.getConfirmedCounts(events);
+        Map<Long, Long> views = statService.getViews(events);
 
         return events.stream()
-                .map(event -> EventMapper.toFullDto(
-                        event, confirmed.getOrDefault(event.getId(), 0L), 0L))
+                .map(e -> EventMapper.toFullDto(e,
+                        confirmed.getOrDefault(e.getId(), 0L),
+                        views.getOrDefault(e.getId(), 0L)))
+                .toList();
+    }
+
+    private EventFullDto toFullDto(Event event) {
+        return toFullDtos(List.of(event)).getFirst();
+    }
+
+    private List<EventShortDto> toShortDtos(List<Event> events) {
+        Map<Long, Long> confirmed = statService.getConfirmedCounts(events);
+        Map<Long, Long> views = statService.getViews(events);
+
+        return events.stream()
+                .map(e -> EventMapper.toShortDto(e,
+                        confirmed.getOrDefault(e.getId(), 0L),
+                        views.getOrDefault(e.getId(), 0L)))
                 .toList();
     }
 
@@ -180,11 +239,6 @@ public class EventServiceImpl implements EventService {
 
     }
 
-    private Map<Long, Long> getConfirmedCounts(List<Event> events) {
-        List<Long> ids = events.stream().map(Event::getId).toList();
-        return requestRepository.countByEventIds(ids, RequestStatus.CONFIRMED).stream()
-                .collect(Collectors.toMap(EventRequestCount::getEventId, EventRequestCount::getCount));
-    }
 
     private void checkEventDate(LocalDateTime time, int minHours) {
         if (time.isBefore(LocalDateTime.now().plusHours(minHours)))
