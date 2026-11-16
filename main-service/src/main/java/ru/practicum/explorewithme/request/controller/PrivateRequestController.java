@@ -1,0 +1,32 @@
+package ru.practicum.explorewithme.request.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+import ru.practicum.explorewithme.request.RequestService;
+import ru.practicum.explorewithme.request.dto.ParticipationRequestDto;
+
+import java.util.List;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/users/{userId}/requests")
+public class PrivateRequestController {
+    private final RequestService service;
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ParticipationRequestDto create(@PathVariable Long userId, @RequestParam Long eventId) {
+        return service.create(userId, eventId);
+    }
+
+    @GetMapping
+    public List<ParticipationRequestDto> getUserRequests(@PathVariable Long userId) {
+        return service.getUserRequests(userId);
+    }
+
+    @PatchMapping("/{requestId}/cancel")
+    public ParticipationRequestDto cancel(@PathVariable Long userId, @PathVariable Long requestId) {
+        return service.cancel(userId, requestId);
+    }
+}
