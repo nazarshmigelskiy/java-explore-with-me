@@ -1,9 +1,12 @@
-package ru.practicum.explorewithme.category;
+package ru.practicum.explorewithme.category.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import ru.practicum.explorewithme.category.CategoryService;
+import ru.practicum.explorewithme.category.dto.CategoryDto;
+import ru.practicum.explorewithme.category.dto.NewCategoryDto;
 
 @RestController
 @RequiredArgsConstructor
