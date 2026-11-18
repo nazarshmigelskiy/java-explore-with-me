@@ -185,11 +185,13 @@ public class EventServiceImpl implements EventService {
     private List<EventFullDto> toFullDtos(List<Event> events) {
         Map<Long, Long> confirmed = statService.getConfirmedCounts(events);
         Map<Long, Long> views = statService.getViews(events);
+        Map<Long, Long> comments = statService.getCommentCounts(events);
 
         return events.stream()
                 .map(e -> EventMapper.toFullDto(e,
                         confirmed.getOrDefault(e.getId(), 0L),
-                        views.getOrDefault(e.getId(), 0L)))
+                        views.getOrDefault(e.getId(), 0L),
+                        comments.getOrDefault(e.getId(), 0L)))
                 .toList();
     }
 
@@ -200,11 +202,13 @@ public class EventServiceImpl implements EventService {
     private List<EventShortDto> toShortDtos(List<Event> events) {
         Map<Long, Long> confirmed = statService.getConfirmedCounts(events);
         Map<Long, Long> views = statService.getViews(events);
+        Map<Long, Long> comments = statService.getCommentCounts(events);
 
         return events.stream()
                 .map(e -> EventMapper.toShortDto(e,
                         confirmed.getOrDefault(e.getId(), 0L),
-                        views.getOrDefault(e.getId(), 0L)))
+                        views.getOrDefault(e.getId(), 0L),
+                        comments.getOrDefault(e.getId(), 0L)))
                 .toList();
     }
 

@@ -1,10 +1,11 @@
-package ru.practicum.explorewithme.compilation;
+package ru.practicum.explorewithme.compilation.controller;
 
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import ru.practicum.explorewithme.compilation.CompilationService;
 import ru.practicum.explorewithme.compilation.dto.CompilationDto;
 
 import java.util.List;

@@ -4,10 +4,10 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import ru.practicum.explorewithme.category.CategoryDto;
+import ru.practicum.explorewithme.category.dto.CategoryDto;
 import ru.practicum.explorewithme.dto.StatsConstants;
-import ru.practicum.explorewithme.event.enums.EventState;
 import ru.practicum.explorewithme.event.Location;
+import ru.practicum.explorewithme.event.enums.EventState;
 import ru.practicum.explorewithme.user.UserShortDto;
 
 import java.time.LocalDateTime;
@@ -35,4 +35,5 @@ public class EventFullDto {
     private EventState state;
     private Long confirmedRequests;
     private Long views;
+    private Long commentsCount;
 }
