@@ -85,11 +85,13 @@ public class CompilationServiceImpl implements CompilationService {
                 .collect(Collectors.toSet());
         Map<Long, Long> confirmed = statService.getConfirmedCounts(allEvents);
         Map<Long, Long> views = statService.getViews(allEvents);
+        Map<Long, Long> comments = statService.getCommentCounts(allEvents);
 
         return compilations.stream()
                 .map(c -> CompilationMapper.toDto(c, c.getEvents().stream()
                         .map(e -> EventMapper.toShortDto(e, confirmed.getOrDefault(e.getId(), 0L),
-                                views.getOrDefault(e.getId(), 0L)))
+                                views.getOrDefault(e.getId(), 0L),
+                                comments.getOrDefault(e.getId(), 0L)))
                         .toList()))
                 .toList();
     }

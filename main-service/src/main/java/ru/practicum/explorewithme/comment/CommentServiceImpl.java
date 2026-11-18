@@ -20,7 +20,7 @@ import ru.practicum.explorewithme.util.OffsetPageRequest;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static ru.practicum.explorewithme.comment.dto.CommentSpecification.*;
+import static ru.practicum.explorewithme.comment.CommentSpecification.*;
 
 @Service
 @RequiredArgsConstructor

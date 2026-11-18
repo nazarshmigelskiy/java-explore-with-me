@@ -1,8 +1,7 @@
-package ru.practicum.explorewithme.comment.dto;
+package ru.practicum.explorewithme.comment;
 
 import lombok.experimental.UtilityClass;
 import org.springframework.data.jpa.domain.Specification;
-import ru.practicum.explorewithme.comment.Comment;
 
 import java.util.List;
 

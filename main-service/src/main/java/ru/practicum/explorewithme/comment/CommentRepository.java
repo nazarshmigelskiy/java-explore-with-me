@@ -6,7 +6,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import ru.practicum.explorewithme.event.EventCount;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,4 +26,8 @@ public interface CommentRepository extends JpaRepository<Comment, Long>, JpaSpec
     @Override
     @EntityGraph(attributePaths = {"author"})
     Page<Comment> findAll(Specification<Comment> spec, Pageable pageable);
+
+    @Query("SELECT c.event.id AS eventId, COUNT(c) AS count FROM Comment c " +
+            "WHERE c.event.id IN :eventIds GROUP BY c.event.id")
+    List<EventCount> countByEventIds(@Param("eventIds") Collection<Long> eventIds);
 }
